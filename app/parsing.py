@@ -75,6 +75,94 @@ def is_greeting(message: str) -> bool:
     return False
 
 
+FILLER_WORDS = {
+    "hello",
+    "thanks",
+    "thank you",
+    "ok",
+    "okay",
+    "got it",
+    "cool",
+    "great",
+    "perfect",
+    "sounds good",
+    "nice",
+    "awesome",
+    "thx",
+    "thnk u",
+    "k",
+    "kk",
+    "sure",
+    "alright",
+    "understood",
+    "gotcha",
+    "yep",
+    "yeah",
+    "yes",
+    "no",
+    "nah",
+    "nope",
+}
+
+
+def is_conversational_filler(message: str) -> bool:
+    raw = message.strip()
+    if not raw:
+        return True
+    cleaned = re.sub(r"[!.,?]+$", "", raw.lower()).strip()
+    if cleaned in FILLER_WORDS:
+        return True
+    cleaned_words = [w.strip("!.,?").lower() for w in raw.split()]
+    if cleaned_words and cleaned_words[0] in FILLER_WORDS:
+        if len(cleaned_words) <= 6:
+            return True
+    return False
+
+
+QUESTION_INDICATORS = [
+    "how",
+    "what",
+    "why",
+    "can",
+    "could",
+    "should",
+    "would",
+    "tell",
+    "explain",
+    "recommend",
+    "suggest",
+    "ways",
+    "methods",
+    "practices",
+    "improve",
+    "increase",
+    "reduce",
+    "support",
+    "help",
+    "give",
+    "provide",
+    "analyze",
+    "assessment",
+]
+
+
+def is_user_question(message: str) -> bool:
+    raw = message.strip()
+    if not raw:
+        return False
+    if is_conversational_filler(raw) or is_greeting(raw):
+        return False
+    if "?" in raw:
+        return True
+    lowered = raw.lower()
+    if any(re.search(rf"\b{re.escape(w)}\b", lowered) for w in QUESTION_INDICATORS):
+        return True
+    words = lowered.split()
+    if len(words) >= 5:
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Field extraction patterns
 # ---------------------------------------------------------------------------
@@ -83,6 +171,17 @@ _SOC_RE = re.compile(r"(?:soil organic carbon|soc)[^\d]{0,15}(\d+(?:\.\d+)?)\s*%
 _SOC_RE_BARE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(?:soil organic carbon|soc)?", re.I)
 
 _RAINFALL_WORD_RE = re.compile(r"\b(low|medium|high)\b.{0,15}rainfall|rainfall.{0,15}\b(low|medium|high)\b", re.I)
+
+_PH_RE = re.compile(r"\b(?:soil\s*)?ph\b[^\d]{0,10}(\d+(?:\.\d+)?)", re.I)
+_MOISTURE_RE = re.compile(r"\b(?:soil\s*)?moisture\b[^\w]{0,10}(low|medium|high|moderate)", re.I)
+
+_POLLUTION_HIGH_RE = re.compile(r"\b(high\s+pollution|polluted|chemical\s+farming|runoff\s+pollution|pesticide|heavy\s+pollution|chemical\s+runoff)\b", re.I)
+_POLLUTION_LOW_RE = re.compile(r"\b(low\s+pollution|unpolluted|clean\s+water)\b", re.I)
+_POLLUTION_MED_RE = re.compile(r"\b(medium\s+pollution|moderate\s+pollution)\b", re.I)
+
+_DEFORESTATION_INC_RE = re.compile(r"\b(edge-deforestation|deforestation|forest\s+loss|tree\s+clearing|deforested)\b", re.I)
+_DEFORESTATION_DEC_RE = re.compile(r"\b(reforestation|afforestation|decreasing\s+deforestation|reduced\s+deforestation)\b", re.I)
+
 # Descriptive rainfall vocabulary -> bucket. Mirrors common agronomy usage;
 # not a cited standard, just sensible defaults.
 _RAINFALL_DESCRIPTORS = {
@@ -93,13 +192,9 @@ _RAINFALL_DESCRIPTORS = {
 _RAINFALL_DESCRIPTOR_RE = re.compile(
     r"\b(" + "|".join(_RAINFALL_DESCRIPTORS.keys()) + r")\b", re.I
 )
-# Numeric + unit, optionally with "/year" or "/yr" or "annual"
 _RAINFALL_NUM_RE = re.compile(
     r"(\d+(?:\.\d+)?)\s*(mm|cm|in(?:ch(?:es)?)?)\b(?:\s*/\s*(?:yr|year))?", re.I
 )
-# Illustrative annual-rainfall thresholds in millimetres. Engineering defaults
-# chosen for demo purposes, not a cited scientific standard — flagged here so
-# they're easy to find and tune, and honest if asked about their provenance.
 _RAINFALL_MM_LOW_MAX = 450
 _RAINFALL_MM_MEDIUM_MAX = 1000
 
@@ -147,10 +242,6 @@ def _bucket_rainfall_mm(mm: float) -> str:
 
 
 def _extract_rainfall(message: str, require_keyword: bool) -> str | None:
-    """require_keyword=True is used for the general (non-pending) scan so a
-    stray number elsewhere in a sentence isn't misread as rainfall; when this
-    field is the one pending, the caller passes require_keyword=False so a
-    bare '300 mm' or 'moderate' resolves on its own."""
     word_match = _RAINFALL_WORD_RE.search(message)
     if word_match:
         val = (word_match.group(1) or word_match.group(2) or "").lower()
@@ -209,7 +300,6 @@ def rule_based_parse(message: str) -> SiteInput:
             data.region = region_word
             break
     else:
-        # tolerate spacing/typo variants like "semi arid", "semiarid", "temprate"
         for token in re.findall(r"[a-z\-]+", lowered):
             match = _fuzzy_match_vocab(token.replace("-", ""), [v.replace("-", "") for v in _REGION_VOCAB], cutoff=0.8)
             if match:
@@ -222,13 +312,30 @@ def rule_based_parse(message: str) -> SiteInput:
             data.land_use = match.group(1).lower()
             break
 
-    if "high pollution" in lowered or "polluted" in lowered:
+    ph_match = _PH_RE.search(message)
+    if ph_match:
+        try:
+            data.soil_ph = float(ph_match.group(1))
+        except (ValueError, IndexError):
+            pass
+
+    moisture_match = _MOISTURE_RE.search(message)
+    if moisture_match:
+        m_val = moisture_match.group(1).lower()
+        data.soil_moisture = "medium" if m_val == "moderate" else m_val
+
+    if _POLLUTION_HIGH_RE.search(lowered):
         data.pollution_level = "high"
-    elif "low pollution" in lowered:
+    elif _POLLUTION_MED_RE.search(lowered):
+        data.pollution_level = "medium"
+    elif _POLLUTION_LOW_RE.search(lowered):
         data.pollution_level = "low"
 
-    if "deforestation" in lowered and ("increasing" in lowered or "rising" in lowered):
-        data.deforestation_trend = "increasing"
+    if _DEFORESTATION_DEC_RE.search(lowered):
+        data.deforestation_trend = "decreasing"
+    elif _DEFORESTATION_INC_RE.search(lowered):
+        if not any(w in lowered for w in ["stable", "none", "no deforestation", "zero deforestation"]):
+            data.deforestation_trend = "increasing"
 
     return data
 

@@ -29,12 +29,12 @@ from app.parsing import (
     humanize_known_fields,
     clarification_retry_message,
     is_greeting,
+    is_conversational_filler,
+    is_user_question,
     SITE_FIELDS,
 )
-from app.reasoning import generate_recommendations
+from app.reasoning import generate_recommendations, answer_question_with_evidence
 from app.llm import get_llm
-
-
 from app.relationships import infer_primary_metrics
 
 
@@ -78,18 +78,49 @@ def node_parse_input(state: AgentState) -> AgentState:
 
 
 def node_check_completeness(state: AgentState) -> str:
-    # If assessment was already completed and no new site fields were provided, avoid repeating reasoning
-    if state["site_input"].assessment_completed and not state.get("newly_filled"):
-        return "post_assessment"
+    # 1. If newly filled site fields were provided (e.g. updated parameters, soil pH, moisture, edge-deforestation)
+    if state.get("newly_filled"):
+        missing = state["site_input"].missing_required()
+        state["missing_fields"] = missing
+        return "ask_clarifying" if missing else "reason"
 
+    # 2. If assessment was completed and no new site parameters were parsed in this message:
+    if state["site_input"].assessment_completed:
+        msg = (state.get("message") or "").strip()
+        if is_greeting(msg):
+            return "handle_greeting_reset"
+        elif is_user_question(msg):
+            return "handle_user_question"
+        else:
+            return "post_assessment"
+
+    # 3. Assessment in progress
     missing = state["site_input"].missing_required()
     state["missing_fields"] = missing
     return "ask_clarifying" if missing else "reason"
 
 
+def node_handle_greeting_reset(state: AgentState) -> AgentState:
+    site_input = SiteInput()
+    question = next_clarifying_question(site_input, is_first_turn=True)
+    state["site_input"] = site_input
+    state["reply"] = question
+    state["status"] = "awaiting_input"
+    state["recommendations"] = []
+    return state
+
+
+def node_handle_user_question(state: AgentState) -> AgentState:
+    msg = state.get("message") or ""
+    recs = answer_question_with_evidence(msg, state["site_input"])
+    state["recommendations"] = recs
+    state["status"] = "complete"
+    return state
+
+
 def node_post_assessment(state: AgentState) -> AgentState:
     state["reply"] = (
-        "Let me know if you'd like to explore a different scenario or share updated site details!"
+        "You're welcome! Let me know if you'd like to explore a different scenario or share updated site details!"
     )
     state["status"] = "complete"
     state["recommendations"] = []
@@ -191,6 +222,8 @@ def build_graph():
     graph = StateGraph(AgentState)
     graph.add_node("parse_input", node_parse_input)
     graph.add_node("ask_clarifying", node_ask_clarifying)
+    graph.add_node("handle_greeting_reset", node_handle_greeting_reset)
+    graph.add_node("handle_user_question", node_handle_user_question)
     graph.add_node("post_assessment", node_post_assessment)
     graph.add_node("reason", node_reason)
     graph.add_node("format_output", node_format_output)
@@ -202,13 +235,16 @@ def build_graph():
         {
             "ask_clarifying": "ask_clarifying",
             "reason": "reason",
+            "handle_greeting_reset": "handle_greeting_reset",
+            "handle_user_question": "handle_user_question",
             "post_assessment": "post_assessment",
         },
     )
     graph.add_edge("ask_clarifying", END)
+    graph.add_edge("handle_greeting_reset", END)
+    graph.add_edge("handle_user_question", "format_output")
     graph.add_edge("post_assessment", END)
     graph.add_edge("reason", "format_output")
-    graph.add_edge("format_output", END)
     return graph.compile()
 
 

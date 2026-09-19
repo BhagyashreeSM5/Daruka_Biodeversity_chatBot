@@ -275,4 +275,41 @@ def generate_recommendations(site_input: SiteInput) -> list[Recommendation]:
     return recommendations
 
 
+def answer_question_with_evidence(user_query: str, site_input: SiteInput) -> list[Recommendation]:
+    """Retrieve evidence chunks matching a user's follow-up question or general inquiry,
+    filtering out evidence incompatible with their known site parameters."""
+    lu = site_input.land_use or ""
+    reg = site_input.region or ""
+    rf = site_input.rainfall or ""
+    full_query = f"{user_query} {lu} {reg} {rf}".strip()
+
+    evidence_list = retrieve_evidence(full_query, top_k=15)
+    recommendations: list[Recommendation] = []
+    seen_ids: set[str] = set()
+
+    for evidence in evidence_list:
+        if evidence.id in seen_ids:
+            continue
+        if not is_evidence_compatible(evidence, site_input):
+            continue
+        impacted = sorted(set(evidence.metric_tags))
+        if len(impacted) < 2:
+            impacted = evidence.metric_tags[:2] or ["soil_organic_carbon", "microbial_diversity"]
+        seen_ids.add(evidence.id)
+        recommendations.append(
+            Recommendation(
+                action=evidence.text.split(",")[0].split(".")[0].strip().capitalize(),
+                reasoning=evidence.text,
+                metrics_impacted=impacted,
+                time_horizon=_time_horizon_for(evidence.metric_tags),
+                confidence=_confidence_for(evidence, len(impacted)),
+                source=f"{evidence.source} ({evidence.year})" if evidence.year else evidence.source,
+            )
+        )
+        if len(recommendations) >= MAX_RECOMMENDATIONS:
+            break
+
+    return recommendations
+
+
 
