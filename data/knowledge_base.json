@@ -1,0 +1,142 @@
+[
+  {
+    "id": "kb001",
+    "text": "Introducing legume-based cover crops fixes atmospheric nitrogen and adds biomass turnover to soil, commonly cited as raising soil organic carbon by roughly 15-25% over 2-3 years, which in turn improves microbial diversity and pollinator forage availability.",
+    "source": "FAO soil health / conservation agriculture guidance",
+    "metric_tags": ["soil_organic_carbon", "microbial_diversity", "pollinator_support"],
+    "year": 2021
+  },
+  {
+    "id": "kb002",
+    "text": "Agroforestry and intercropping in semi-arid regions increase both below-ground carbon storage and above-ground canopy structural diversity, while moderating local temperature extremes and reducing wind-driven soil erosion.",
+    "source": "IPCC AR6 WG3, land-use and agriculture chapter",
+    "metric_tags": ["soil_organic_carbon", "habitat_diversity", "microclimate"],
+    "year": 2022
+  },
+  {
+    "id": "kb003",
+    "text": "Riparian buffer strips of native vegetation along waterways reduce nutrient and sediment runoff into streams, which is consistently linked to improved downstream aquatic species survival and water quality.",
+    "source": "FAO watershed management guidance",
+    "metric_tags": ["water_quality", "species_survival", "habitat_fragmentation"],
+    "year": 2020
+  },
+  {
+    "id": "kb004",
+    "text": "Monoculture cropping systems reduce habitat heterogeneity relative to polyculture or mixed cropping, and are associated with measurable declines in pollinator and bird species richness in surrounding landscapes.",
+    "source": "IPBES Global Assessment on Biodiversity and Ecosystem Services",
+    "metric_tags": ["species_richness", "habitat_diversity", "land_use"],
+    "year": 2019
+  },
+  {
+    "id": "kb005",
+    "text": "No-till and reduced-tillage farming preserve soil structure and reduce oxidation of organic matter, increasing soil organic carbon retention and benefiting soil microbial biodiversity over multi-year periods.",
+    "source": "FAO Conservation Agriculture guidance",
+    "metric_tags": ["soil_organic_carbon", "microbial_diversity"],
+    "year": 2021
+  },
+  {
+    "id": "kb006",
+    "text": "Hedgerows and uncultivated field margins act as biodiversity corridors that reconnect fragmented habitat patches, supporting higher insect and bird diversity than fields without margin vegetation.",
+    "source": "European Environment Agency, biodiversity corridor studies",
+    "metric_tags": ["habitat_fragmentation", "species_richness"],
+    "year": 2020
+  },
+  {
+    "id": "kb007",
+    "text": "Rainwater harvesting and micro-catchment techniques in low-rainfall regions improve soil moisture retention, supporting both crop resilience and survival of native drought-adapted vegetation.",
+    "source": "FAO water management in drylands guidance",
+    "metric_tags": ["water_availability", "species_survival"],
+    "year": 2019
+  },
+  {
+    "id": "kb008",
+    "text": "Reducing broad-spectrum pesticide use allows measurable recovery of soil microbial diversity and pollinator populations over subsequent growing seasons.",
+    "source": "IPBES pollinator assessment",
+    "metric_tags": ["microbial_diversity", "pollinator_support", "pollution_level"],
+    "year": 2016
+  },
+  {
+    "id": "kb009",
+    "text": "Mixed-species reforestation produces higher structural habitat diversity than single-species plantations, improving species richness outcomes for birds and understory fauna.",
+    "source": "IPCC land-use and forestry guidance",
+    "metric_tags": ["habitat_diversity", "species_richness", "deforestation_trend"],
+    "year": 2022
+  },
+  {
+    "id": "kb010",
+    "text": "Crop rotation that includes nitrogen-fixing legumes reduces reliance on synthetic fertilizer, indirectly lowering nutrient runoff and protecting downstream aquatic biodiversity.",
+    "source": "FAO conservation agriculture guidance",
+    "metric_tags": ["soil_organic_carbon", "water_quality", "species_survival"],
+    "year": 2021
+  },
+  {
+    "id": "kb011",
+    "text": "Wetland restoration is consistently associated with significant increases in species richness of amphibians, waterbirds and aquatic invertebrates within a few growing seasons.",
+    "source": "Ramsar Convention wetland restoration guidance",
+    "metric_tags": ["species_richness", "water_availability", "habitat_diversity"],
+    "year": 2018
+  },
+  {
+    "id": "kb012",
+    "text": "Contour farming and terracing on sloped land reduce soil erosion, preserving topsoil organic carbon and reducing sediment-driven degradation of downstream habitats.",
+    "source": "FAO soil erosion control guidance",
+    "metric_tags": ["soil_organic_carbon", "habitat_fragmentation"],
+    "year": 2020
+  },
+  {
+    "id": "kb013",
+    "text": "Increasing tree canopy cover in agricultural landscapes moderates local temperature extremes, buffering soil microbial communities from heat and moisture stress.",
+    "source": "IPCC AR6, land-use chapter",
+    "metric_tags": ["microclimate", "microbial_diversity", "soil_organic_carbon"],
+    "year": 2022
+  },
+  {
+    "id": "kb014",
+    "text": "Restoration using drought-tolerant native species produces more durable long-term ecosystem resilience than restoration relying on introduced or non-native species.",
+    "source": "IUCN ecosystem restoration guidance",
+    "metric_tags": ["species_survival", "habitat_diversity"],
+    "year": 2020
+  },
+  {
+    "id": "kb015",
+    "text": "Composting and organic matter amendments raise soil organic carbon and water-holding capacity, indirectly increasing plant-available water that supports surrounding biodiversity.",
+    "source": "FAO soil organic carbon guidance",
+    "metric_tags": ["soil_organic_carbon", "water_availability"],
+    "year": 2021
+  },
+  {
+    "id": "kb016",
+    "text": "Reduced deforestation rates directly correlate with preserved habitat connectivity, while continued forest loss is a leading driver of fragmentation-related species decline.",
+    "source": "IPCC / IPBES joint report on biodiversity and climate",
+    "metric_tags": ["deforestation_trend", "habitat_fragmentation", "species_richness"],
+    "year": 2021
+  },
+  {
+    "id": "kb017",
+    "text": "Diversified crop rotations using three or more species show measurably higher soil microbial diversity than simple one- or two-species rotations.",
+    "source": "FAO conservation agriculture guidance",
+    "metric_tags": ["microbial_diversity", "land_use"],
+    "year": 2021
+  },
+  {
+    "id": "kb018",
+    "text": "Buffer strips of native grasses along field edges reduce pesticide drift onto adjacent habitat, lowering non-target impact on pollinator species.",
+    "source": "IPBES pollinator assessment",
+    "metric_tags": ["pollinator_support", "pollution_level"],
+    "year": 2016
+  },
+  {
+    "id": "kb019",
+    "text": "Rotational grazing management on rangelands increases soil carbon sequestration while also improving grassland plant species diversity compared to continuous grazing.",
+    "source": "FAO grasslands and rangeland management guidance",
+    "metric_tags": ["soil_organic_carbon", "species_richness", "land_use"],
+    "year": 2020
+  },
+  {
+    "id": "kb020",
+    "text": "Urban and peri-urban green corridors support measurable increases in bird and pollinator species richness even within otherwise fragmented built landscapes.",
+    "source": "European Environment Agency urban biodiversity report",
+    "metric_tags": ["species_richness", "habitat_fragmentation"],
+    "year": 2019
+  }
+]

@@ -1,0 +1,7 @@
+[tool.ruff]
+line-length = 110
+exclude = ["data", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501"]

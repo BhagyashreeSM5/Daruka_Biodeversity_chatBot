@@ -1,0 +1,34 @@
+[
+  {
+    "id": "semi-arid-monoculture",
+    "label": "Semi-arid monoculture wheat (brief's example)",
+    "data": {
+      "soil_organic_carbon_pct": 0.3,
+      "rainfall": "low",
+      "land_use": "monoculture wheat",
+      "region": "semi-arid"
+    }
+  },
+  {
+    "id": "tropical-deforestation",
+    "label": "Tropical land with rising deforestation",
+    "data": {
+      "soil_organic_carbon_pct": 1.8,
+      "rainfall": "high",
+      "land_use": "cropland",
+      "region": "tropical",
+      "deforestation_trend": "increasing"
+    }
+  },
+  {
+    "id": "polluted-grassland",
+    "label": "Temperate grassland with high pollution",
+    "data": {
+      "soil_organic_carbon_pct": 2.1,
+      "rainfall": "medium",
+      "land_use": "grassland",
+      "region": "temperate",
+      "pollution_level": "high"
+    }
+  }
+]

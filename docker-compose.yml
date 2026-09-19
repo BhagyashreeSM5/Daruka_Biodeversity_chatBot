@@ -1,0 +1,15 @@
+# Optional. The database is now an external hosted Postgres (Supabase, Neon,
+# etc. — see README), so this only containerizes the app itself. You do NOT
+# need this file to run the project — `uvicorn app.main:app` locally works
+# just as well as long as .env points DATABASE_URL at your hosted DB.
+services:
+  app:
+    build: .
+    container_name: darukaa_app
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./static:/app/static

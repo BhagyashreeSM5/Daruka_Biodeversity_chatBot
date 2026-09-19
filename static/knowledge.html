@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Darukaa.Earth — Knowledge Base</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; background: #f5f7f2; color: #1c2b1a; padding: 0 16px; }
+  h1 { font-size: 1.3rem; }
+  nav a { color: #3a6b35; text-decoration: none; font-size: 0.9rem; }
+  .card { background: white; border: 1px solid #cfd9c8; border-radius: 8px; padding: 14px 18px; margin-bottom: 12px; }
+  .card .text { margin: 0 0 8px 0; }
+  .meta { font-size: 0.82rem; color: #4a5a45; display: flex; flex-wrap: wrap; gap: 10px; }
+  .tag { background: #e3ecdc; border-radius: 4px; padding: 2px 8px; font-size: 0.78rem; }
+  .source { font-style: italic; }
+  #count { color: #667; font-size: 0.9rem; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+  <nav><a href="/">&larr; Back to chatbot</a></nav>
+  <h1>📚 Knowledge Base — curated evidence entries</h1>
+  <div id="count">Loading…</div>
+  <div id="list"></div>
+
+<script>
+async function load() {
+  const res = await fetch("/api/knowledge");
+  const entries = await res.json();
+  document.getElementById("count").textContent = `${entries.length} curated entries, each with a source citation.`;
+  const list = document.getElementById("list");
+  for (const e of entries) {
+    const div = document.createElement("div");
+    div.className = "card";
+    const tags = e.metric_tags.map(t => `<span class="tag">${t}</span>`).join(" ");
+    div.innerHTML = `
+      <p class="text">${e.text}</p>
+      <div class="meta">
+        <span class="source">${e.source}${e.year ? " (" + e.year + ")" : ""}</span>
+        ${tags}
+      </div>`;
+    list.appendChild(div);
+  }
+}
+load();
+</script>
+</body>
+</html>
