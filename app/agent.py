@@ -167,52 +167,109 @@ def node_reason(state: AgentState) -> AgentState:
 
 def node_format_output(state: AgentState) -> AgentState:
     recs = state["recommendations"]
+    site = state["site_input"]
     llm = get_llm()
-    has_urgent = bool(infer_primary_metrics(state["site_input"]))
+    has_urgent = bool(infer_primary_metrics(site))
 
     if llm is not None:
         try:
-            state["reply"] = _llm_phrase(recs, llm, has_urgent=has_urgent)
+            state["reply"] = _llm_phrase(recs, llm, site, has_urgent=has_urgent)
             return state
         except Exception:
             pass
 
-    if not has_urgent:
-        lu_label = state["site_input"].land_use or "your site"
-        lines = [
-            f"Nothing in your inputs indicates an urgent environmental issue. "
-            f"Here's a general resilience recommendation for {lu_label}:\n"
-        ]
-    else:
-        lines = ["Here's what the evidence supports for this site:\n"]
+    known = []
+    if site.soil_organic_carbon_pct is not None:
+        known.append(f"Soil Organic Carbon: {site.soil_organic_carbon_pct}%")
+    if site.rainfall:
+        known.append(f"Rainfall: {site.rainfall}")
+    if site.land_use:
+        known.append(f"Land Use: {site.land_use}")
+    if site.region:
+        known.append(f"Region: {site.region}")
+    if site.soil_ph is not None:
+        known.append(f"Soil pH: {site.soil_ph}")
+    if site.soil_moisture:
+        known.append(f"Soil Moisture: {site.soil_moisture}")
+    if site.pollution_level:
+        known.append(f"Pollution Level: {site.pollution_level}")
+    if site.deforestation_trend:
+        known.append(f"Deforestation Trend: {site.deforestation_trend}")
+
+    summary_text = (
+        f"Site profile evaluated: {', '.join(known) if known else 'general ecosystem'}. "
+        f"{'Urgent environmental pressure(s) identified requiring targeted ecological intervention.' if has_urgent else 'Metrics indicate healthy base conditions; general resilience recommendations apply.'}"
+    )
+
+    lines = [f"**Site assessment:**\n{summary_text}\n"]
 
     for i, rec in enumerate(recs, start=1):
-        lines.append(f"{i}. {rec.action}")
-        lines.append(f"   Why: {rec.reasoning}")
-        lines.append(f"   Metrics impacted: {', '.join(rec.metrics_impacted)}")
-        lines.append(f"   Time horizon: {rec.time_horizon} | Confidence: {rec.confidence}")
-        lines.append(f"   Source: {rec.source}\n")
+        lines.append(f"**{i}. {rec.action}**")
+        lines.append(f"**What to do:** Implement {rec.action.lower()}. {rec.reasoning.split('.')[0]}.")
+        lines.append(f"**Why it fits this site:** Designed for {site.land_use or 'agricultural/natural land'} in a {site.region or 'stated'} region under {site.rainfall or 'observed'} rainfall conditions.")
+        lines.append(f"**Ecological mechanism:** {rec.reasoning}")
+        lines.append(f"**Metrics impacted:** {', '.join(rec.metrics_impacted)}")
+        lines.append(f"**Time horizon:** {rec.time_horizon.capitalize()} | **Confidence:** {rec.confidence.capitalize()}")
+        lines.append(f"**Evidence:** {rec.source}")
+        lines.append(f"**Limitation:** Site-specific soil testing and multi-year monitoring recommended to confirm long-term outcomes.\n")
+
     state["reply"] = "\n".join(lines)
     return state
 
 
-def _llm_phrase(recommendations: list[Recommendation], llm, has_urgent: bool = True) -> str:
+SYSTEM_PROMPT = """
+You are Darukaa.Earth's AI Biodiversity Intelligence system. Behave like an evidence-driven environmental scientist, not a generic chatbot.
+
+1. Use the actual site data:
+Extract and preserve all provided parameters (soil pH, organic carbon, moisture, rainfall/climate/region, land use, biodiversity indicators, pollution and its source, deforestation and habitat fragmentation). Do not invent or silently change values. Distinguish Known (explicitly provided), Unknown (not provided), and Inferred (scientifically derived). Never present an inference as a user-provided fact.
+
+2. Check applicability:
+Every recommendation must fit the user's specific ecosystem, climate and land use. Reject recommendations that are generally valid but unsuitable for the stated site.
+
+3. Multi-metric reasoning:
+Do not give single-variable recommendations. Build a causal chain: Site conditions -> ecological mechanism -> biodiversity effect -> intervention -> measurable metric. Connect at least 2-3 relevant environmental variables where scientifically appropriate.
+
+4. Handle missing information:
+Ask a clarifying question when missing information could materially change the recommendation. If the available information is insufficient for a site-specific recommendation, say what is missing instead of guessing.
+
+5. Evidence grounding:
+Retrieve evidence before recommending an intervention. Prefer peer-reviewed studies, systematic reviews, IPCC, IPBES, FAO and other authoritative sources. The source must support the specific claim, not merely the general topic. Never invent sources, statistics, percentages, or timeframes. Only provide quantitative estimates when the retrieved evidence supports them.
+
+6. Select relevant recommendations:
+Give 2-4 strong recommendations, prioritizing interventions that directly address the site's major pressures, match the land use, involve multiple environmental variables, have credible evidence, and have measurable outcomes.
+
+7. Output format:
+**Site assessment:**
+Briefly summarize the main ecological conditions and interacting pressures.
+
+For each recommendation:
+
+**1. [Specific intervention]**
+**What to do:** Concrete action.
+**Why it fits this site:** Connect the user's actual parameters.
+**Ecological mechanism:** Explain the causal chain.
+**Metrics impacted:** List measurable metrics.
+**Time horizon:** Short / Medium / Long
+**Confidence:** High / Medium / Low
+**Evidence:** Source supporting the recommendation.
+**Limitation:** Important uncertainty or missing information.
+"""
+
+
+def _llm_phrase(recommendations: list[Recommendation], llm, site_input: SiteInput, has_urgent: bool = True) -> str:
     summary = "\n".join(
         f"- {r.action} (impacts: {', '.join(r.metrics_impacted)}; "
         f"horizon: {r.time_horizon}; confidence: {r.confidence}; source: {r.source})\n"
         f"  reasoning: {r.reasoning}"
         for r in recommendations
     )
-    framing = (
-        "The site metrics do not indicate an urgent environmental crisis; explicitly state "
-        "that nothing in the inputs indicates an urgent issue and frame these as general resilience recommendations. "
-        if not has_urgent else ""
-    )
+    known = [f"{k}: {v}" for k, v in site_input.model_dump().items() if v is not None and k not in ("intro_shown", "assessment_completed")]
     prompt = (
-        f"Rewrite the following structured recommendations as a clear, well-organized "
-        f"reply for a land manager. {framing}Keep every fact, number, metric, time horizon, "
-        f"confidence level and source exactly as given — do not invent or drop anything. "
-        f"Use short numbered sections.\n\n" + summary
+        f"{SYSTEM_PROMPT}\n\n"
+        f"Known site parameters: {', '.join(known)}\n\n"
+        f"Retrieved structured recommendations to rephrase:\n"
+        f"{summary}\n\n"
+        f"Format your response using the exact Section 7 layout (**Site assessment:** followed by numbered recommendations with bold field names)."
     )
     result = llm.invoke(prompt)
     return result.content if hasattr(result, "content") else str(result)
