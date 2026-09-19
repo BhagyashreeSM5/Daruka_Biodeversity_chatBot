@@ -63,11 +63,27 @@ def api_examples():
 @app.post("/chat", response_model=ChatResponse)
 def chat(turn: ChatTurn):
     """Multi-turn endpoint. Accepts free text and/or structured `data`.
-    State persists per session_id across calls (Postgres-backed)."""
+    State persists per session_id across calls (Postgres-backed).
+    `data` can be a flat SiteInput dict or a nested JSON object (spec §27)."""
     if not turn.message and not turn.data:
         raise HTTPException(400, "Provide `message` and/or `data`.")
 
     existing, turn_count = load_and_increment_state(turn.session_id)
+
+    # Normalize incoming data: support both flat SiteInput and nested JSON (spec §27)
+    incoming_data = None
+    if turn.data:
+        if isinstance(turn.data, SiteInput):
+            incoming_data = turn.data.model_dump()
+        elif isinstance(turn.data, dict):
+            # Nested JSON like {soil: {organic_carbon: ...}, climate: {rainfall: ...}}
+            normalized = SiteInput.from_dict_or_nested(turn.data)
+            incoming_data = normalized.model_dump()
+        else:
+            try:
+                incoming_data = turn.data.model_dump()
+            except AttributeError:
+                incoming_data = dict(turn.data) if turn.data else None
 
     graph = get_graph()
     result = graph.invoke(
@@ -75,7 +91,7 @@ def chat(turn: ChatTurn):
             "session_id": turn.session_id,
             "turn_count": turn_count,
             "message": turn.message,
-            "incoming_data": turn.data.model_dump() if turn.data else None,
+            "incoming_data": incoming_data,
             "site_input": existing,
         }
     )
@@ -92,9 +108,9 @@ def chat(turn: ChatTurn):
 
 
 @app.post("/chat/structured", response_model=ChatResponse)
-def chat_structured(session_id: str, data: SiteInput):
-    """Pure structured-JSON entry point — also what the guided form and the
-    raw-JSON-paste UI both submit to under the hood."""
+def chat_structured(session_id: str, data: dict):
+    """Pure structured-JSON entry point — supports both flat SiteInput and
+    nested environmental JSON objects (spec §27)."""
     return chat(ChatTurn(session_id=session_id, message=None, data=data))
 
 

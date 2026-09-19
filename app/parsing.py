@@ -2,19 +2,30 @@ import re
 import difflib
 from dataclasses import dataclass
 
-from app.models import SiteInput
+from app.models import SiteInput, SITE_FIELDS
 from app.llm import get_llm
 
 FIELD_LABELS = {
     "soil_organic_carbon_pct": "Soil Organic Carbon",
     "rainfall": "Rainfall",
+    "temperature": "Temperature",
     "land_use": "Land Use",
     "region": "Region",
     "soil_ph": "Soil pH",
     "soil_moisture": "Soil Moisture",
     "pollution_level": "Pollution Level",
     "deforestation_trend": "Deforestation Trend",
+    "human_impact": "Human Impact",
+    "biodiversity_status": "Biodiversity Status",
+    "species_richness": "Species Richness",
+    "habitat_diversity": "Habitat Diversity",
 }
+
+# Correction intent patterns (spec §7)
+_CORRECTION_RE = re.compile(
+    r"\b(actually|correction|no[,.]?\s*(it'?s|the)|not\s+\w+[,.]?\s*(?:it'?s|but)|wrong|correct\s+that|i\s+meant)\b",
+    re.I,
+)
 
 FIELD_QUESTIONS = {
     "soil_organic_carbon_pct": "What's the soil organic carbon percentage (e.g. 0.3%)?",
@@ -76,7 +87,6 @@ def is_greeting(message: str) -> bool:
 
 
 FILLER_WORDS = {
-    "hello",
     "thanks",
     "thank you",
     "ok",
@@ -175,12 +185,50 @@ _RAINFALL_WORD_RE = re.compile(r"\b(low|medium|high)\b.{0,15}rainfall|rainfall.{
 _PH_RE = re.compile(r"\b(?:soil\s*)?ph\b[^\d]{0,10}(\d+(?:\.\d+)?)", re.I)
 _MOISTURE_RE = re.compile(r"\b(?:soil\s*)?moisture\b[^\w]{0,10}(low|medium|high|moderate)", re.I)
 
-_POLLUTION_HIGH_RE = re.compile(r"\b(high\s+pollution|polluted|chemical\s+farming|runoff\s+pollution|pesticide|heavy\s+pollution|chemical\s+runoff)\b", re.I)
+_POLLUTION_HIGH_RE = re.compile(r"\b(high\s+pollution|polluted|heavy\s+pollution|chemical\s+runoff)\b", re.I)
 _POLLUTION_LOW_RE = re.compile(r"\b(low\s+pollution|unpolluted|clean\s+water)\b", re.I)
 _POLLUTION_MED_RE = re.compile(r"\b(medium\s+pollution|moderate\s+pollution)\b", re.I)
 
 _DEFORESTATION_INC_RE = re.compile(r"\b(edge-deforestation|deforestation|forest\s+loss|tree\s+clearing|deforested)\b", re.I)
 _DEFORESTATION_DEC_RE = re.compile(r"\b(reforestation|afforestation|decreasing\s+deforestation|reduced\s+deforestation)\b", re.I)
+
+# Human impact patterns (spec §5) — separate from pollution
+_HUMAN_IMPACT_RE = re.compile(
+    r"\b("
+    r"overgrazing|over-grazing|over\s+grazing|"
+    r"(?:moderate|heavy|light|low|high)?\s*pesticide\s*(?:use|application|exposure|drift)?|"
+    r"agricultural\s+runoff|nutrient\s+runoff|chemical\s+(?:farming|runoff)|"
+    r"road\s+construction|road\s+building|"
+    r"mining|quarrying|"
+    r"logging|illegal\s+logging|"
+    r"urbanization|urban\s+sprawl|"
+    r"(?:habitat|land)\s+(?:clearing|conversion)|"
+    r"drainage|wetland\s+drainage|"
+    r"fire|burning|slash.and.burn"
+    r")\b",
+    re.I,
+)
+
+# Biodiversity status patterns (spec §4)
+_BIODIVERSITY_HIGH_RE = re.compile(
+    r"\b("
+    r"high\s+(?:species\s+)?(?:richness|diversity|biodiversity)|"
+    r"species[- ]rich|biodiverse|"
+    r"continuous\s+habitat|intact\s+habitat|"
+    r"healthy\s+ecosystem|pristine"
+    r")\b",
+    re.I,
+)
+_BIODIVERSITY_LOW_RE = re.compile(
+    r"\b("
+    r"low\s+(?:species\s+)?(?:richness|diversity|biodiversity)|"
+    r"low\s+pollinator\s+(?:diversity|populations?)|"
+    r"declining\s+(?:native\s+)?(?:grasses|species|populations?|biodiversity)|"
+    r"degraded\s+(?:habitat|ecosystem)|"
+    r"fragmented\s+(?:habitat|corridors?|wildlife)"
+    r")\b",
+    re.I,
+)
 
 # Descriptive rainfall vocabulary -> bucket. Mirrors common agronomy usage;
 # not a cited standard, just sensible defaults.
@@ -200,10 +248,13 @@ _RAINFALL_MM_MEDIUM_MAX = 1000
 
 _REGION_VOCAB = [
     "semi-arid", "arid", "tropical", "temperate", "subtropical", "coastal", "alpine",
+    "mediterranean", "boreal", "montane", "savanna",
 ]
 _LAND_USE_VOCAB = [
     "monoculture", "agroforestry", "polyculture", "intercropping",
     "grassland", "cropland", "pasture", "orchard", "rangeland",
+    "forest", "mixed native forest", "woodland", "vineyard",
+    "plantation", "silvopasture", "forest edge",
 ]
 _CROPS = [
     "wheat", "rice", "maize", "corn", "millet", "soy", "cotton",
@@ -211,14 +262,25 @@ _CROPS = [
 ]
 _CROPS_RE = r"(?:" + "|".join(_CROPS) + r")"
 _LAND_USE_PATTERNS = [
+    re.compile(rf"\b(mixed\s+native\s+forest)\b", re.I),
+    re.compile(rf"\b(forest\s+edge)\b", re.I),
     re.compile(rf"\b(monoculture\s+{_CROPS_RE}|polyculture\s+{_CROPS_RE}|intercropping\s+{_CROPS_RE})\b", re.I),
-    re.compile(r"\b(monoculture|agroforestry|polyculture|intercropping|grassland|cropland|pasture|orchard|rangeland)\b", re.I),
+    re.compile(r"\b(monoculture|agroforestry|polyculture|intercropping|grassland|cropland|pasture|orchard|rangeland|vineyard|plantation|silvopasture|woodland)\b", re.I),
     re.compile(rf"\b({_CROPS_RE})\b", re.I),
 ]
 
 _STRAY_WORDS = {"fro", "for", "a", "an", "is", "was", "are", "our", "the", "of", "it", "its"}
 _FILLER_PREFIXES = re.compile(
     r"^(it'?s|its|we (use|have)|used for|used|for|fro|land use is|region is|currently)\s+",
+    re.I,
+)
+
+# --- New-site detection phrases (spec §2A) ---
+_NEW_SITE_PHRASES = re.compile(
+    r"\b(new\s+site|another\s+site|different\s+(?:region|site|location|area)|"
+    r"consider\s+this\s+(?:scenario|site|case)|new\s+case|separate\s+site|"
+    r"next\s+site|second\s+site|alternative\s+site|"
+    r"analyze\s+this|evaluate\s+this|assess\s+this)\b",
     re.I,
 )
 
@@ -282,40 +344,50 @@ def rule_based_parse(message: str) -> SiteInput:
     """General-purpose scan across a free-form message. Used first; anything
     it misses for a single pending field is retried by _parse_expected_field."""
     data = SiteInput()
+    origin: dict[str, str] = {}
 
     soc_match = _SOC_RE.search(message) or _SOC_RE_BARE.search(message)
     if soc_match:
         try:
             data.soil_organic_carbon_pct = float(soc_match.group(1))
+            origin["soil_organic_carbon_pct"] = "KNOWN"
         except (ValueError, IndexError):
             pass
 
     rainfall = _extract_rainfall(message, require_keyword=True)
     if rainfall:
         data.rainfall = rainfall
+        origin["rainfall"] = "KNOWN"
 
     lowered = message.lower()
+
+    # Region extraction
     for region_word in _REGION_VOCAB:
         if re.search(rf"\b{re.escape(region_word)}\b", lowered):
             data.region = region_word
+            origin["region"] = "KNOWN"
             break
     else:
         for token in re.findall(r"[a-z\-]+", lowered):
             match = _fuzzy_match_vocab(token.replace("-", ""), [v.replace("-", "") for v in _REGION_VOCAB], cutoff=0.8)
             if match:
                 data.region = next(v for v in _REGION_VOCAB if v.replace("-", "") == match)
+                origin["region"] = "KNOWN"
                 break
 
+    # Land use — try multi-word patterns first (e.g. "mixed native forest", "forest edge")
     for pattern in _LAND_USE_PATTERNS:
         match = pattern.search(message)
         if match:
             data.land_use = match.group(1).lower()
+            origin["land_use"] = "KNOWN"
             break
 
     ph_match = _PH_RE.search(message)
     if ph_match:
         try:
             data.soil_ph = float(ph_match.group(1))
+            origin["soil_ph"] = "KNOWN"
         except (ValueError, IndexError):
             pass
 
@@ -323,20 +395,53 @@ def rule_based_parse(message: str) -> SiteInput:
     if moisture_match:
         m_val = moisture_match.group(1).lower()
         data.soil_moisture = "medium" if m_val == "moderate" else m_val
+        origin["soil_moisture"] = "KNOWN"
 
+    # Pollution — only from explicit pollution keywords, NOT from human_impact
     if _POLLUTION_HIGH_RE.search(lowered):
         data.pollution_level = "high"
+        origin["pollution_level"] = "KNOWN"
     elif _POLLUTION_MED_RE.search(lowered):
         data.pollution_level = "medium"
+        origin["pollution_level"] = "KNOWN"
     elif _POLLUTION_LOW_RE.search(lowered):
         data.pollution_level = "low"
+        origin["pollution_level"] = "KNOWN"
 
+    # Deforestation
     if _DEFORESTATION_DEC_RE.search(lowered):
         data.deforestation_trend = "decreasing"
+        origin["deforestation_trend"] = "KNOWN"
     elif _DEFORESTATION_INC_RE.search(lowered):
         if not any(w in lowered for w in ["stable", "none", "no deforestation", "zero deforestation"]):
             data.deforestation_trend = "increasing"
+            origin["deforestation_trend"] = "KNOWN"
 
+    # Human impact (spec §5) — extracted as free-text, NOT auto-mapped to pollution
+    impact_match = _HUMAN_IMPACT_RE.search(message)
+    if impact_match:
+        data.human_impact = impact_match.group(0).strip().lower()
+        origin["human_impact"] = "KNOWN"
+
+    # Biodiversity status
+    bio_high = _BIODIVERSITY_HIGH_RE.search(message)
+    bio_low = _BIODIVERSITY_LOW_RE.search(message)
+    if bio_high and bio_low:
+        # Both detected — capture the full description
+        data.biodiversity_status = f"{bio_high.group(0).strip().lower()}, {bio_low.group(0).strip().lower()}"
+        origin["biodiversity_status"] = "KNOWN"
+    elif bio_low:
+        data.biodiversity_status = bio_low.group(0).strip().lower()
+        origin["biodiversity_status"] = "KNOWN"
+    elif bio_high:
+        data.biodiversity_status = bio_high.group(0).strip().lower()
+        origin["biodiversity_status"] = "KNOWN"
+
+    for f in SITE_FIELDS:
+        if f in origin:
+            data.field_origin[f] = origin[f]
+        elif f not in data.field_origin:
+            data.field_origin[f] = "UNKNOWN"
     return data
 
 
@@ -379,6 +484,63 @@ def _parse_expected_field(message: str, field: str) -> object | None:
 
 
 # ---------------------------------------------------------------------------
+# New-site detection (spec §2A, §3)
+# ---------------------------------------------------------------------------
+
+def _is_new_site_message(parsed: SiteInput, existing: SiteInput, message: str) -> bool:
+    """Determine whether the user's message represents a brand-new site scenario
+    rather than an incremental update to the existing site.
+
+    Uses multiple signals — not just field count — per spec §2A."""
+
+    # Signal 1: Explicit new-site phrases
+    if _NEW_SITE_PHRASES.search(message):
+        return True
+
+    # Count how many *core* site fields the new message fills
+    core_fields = ["soil_organic_carbon_pct", "rainfall", "land_use", "region"]
+    new_core_count = sum(1 for f in core_fields if getattr(parsed, f, None) is not None)
+
+    # Count ALL site fields filled in this message
+    all_new_fields = [f for f in SITE_FIELDS if getattr(parsed, f, None) is not None]
+    new_total = len(all_new_fields)
+
+    # Signal 2: If user supplies all 4 required fields, it's a new site
+    if new_core_count >= 4:
+        return True
+
+    # Signal 3: 3+ core fields AND at least one differs from existing
+    if new_core_count >= 3:
+        changed = 0
+        for f in core_fields:
+            new_val = getattr(parsed, f, None)
+            old_val = getattr(existing, f, None)
+            if new_val is not None and old_val is not None and new_val != old_val:
+                changed += 1
+        if changed >= 2:
+            return True
+
+    # Signal 4: Incompatible ecosystem — region changed AND land_use changed
+    new_region = getattr(parsed, "region", None)
+    new_land_use = getattr(parsed, "land_use", None)
+    old_region = getattr(existing, "region", None)
+    old_land_use = getattr(existing, "land_use", None)
+    if (new_region and old_region and new_region != old_region and
+            new_land_use and old_land_use and new_land_use != old_land_use):
+        return True
+
+    # Signal 5: High total field count (5+) with substantial changes
+    if new_total >= 5:
+        return True
+
+    # Signal 6: Assessment was already completed and user provides 3+ new fields
+    if existing.assessment_completed and new_total >= 3:
+        return True
+
+    return False
+
+
+# ---------------------------------------------------------------------------
 # Public parse entry point
 # ---------------------------------------------------------------------------
 
@@ -387,20 +549,7 @@ class ParseResult:
     site_input: SiteInput
     newly_filled: list[str]      # fields this turn actually added
     understood: bool             # False => could not fill the pending field at all
-
-
-SITE_FIELDS = [
-    "soil_organic_carbon_pct",
-    "soil_ph",
-    "soil_moisture",
-    "rainfall",
-    "land_use",
-    "region",
-    "latitude",
-    "longitude",
-    "pollution_level",
-    "deforestation_trend",
-]
+    is_correction: bool = False  # True when user is correcting a previously stated value
 
 
 def parse_message(message: str, existing: SiteInput) -> ParseResult:
@@ -409,18 +558,42 @@ def parse_message(message: str, existing: SiteInput) -> ParseResult:
     if parsed is None:
         parsed = rule_based_parse(message)
 
-    # If the user provided a full set of required fields, treat as a fresh scenario
+    # --- Correction detection (spec §7) ---
+    is_correction = bool(_CORRECTION_RE.search(message))
+
+    # --- New-site detection (spec §1, §3) ---
+    if not is_correction and _is_new_site_message(parsed, existing, message):
+        # Fresh site: start from parsed data, don't merge with old state
+        fresh = parsed.model_copy()
+        fresh.assessment_completed = False
+        fresh.intro_shown = existing.intro_shown  # preserve UI state only
+        fresh.user_values = {}  # clean slate
+        newly_filled = [f for f in SITE_FIELDS if getattr(parsed, f) is not None]
+        # Ensure all origins are KNOWN for explicitly provided fields, UNKNOWN for rest
+        for f in SITE_FIELDS:
+            if getattr(fresh, f, None) is not None:
+                fresh.set_known(f)
+            else:
+                fresh.field_origin[f] = "UNKNOWN"
+        return ParseResult(site_input=fresh, newly_filled=newly_filled, understood=True)
+
+    # If the user provided all required fields (even without new-site signal), treat as complete
     if not parsed.missing_required():
         merged = parsed.model_copy()
+        merged.user_values = {}  # track fresh values
         newly_filled = [f for f in SITE_FIELDS if getattr(parsed, f) is not None]
-        return ParseResult(site_input=merged, newly_filled=newly_filled, understood=True)
+        for f in newly_filled:
+            merged.set_known(f)
+        return ParseResult(site_input=merged, newly_filled=newly_filled, understood=True, is_correction=is_correction)
 
+    # --- Incremental merge onto existing site ---
     merged = existing.model_copy()
     newly_filled: list[str] = []
     for field in SITE_FIELDS:
         value = getattr(parsed, field, None)
         if value is not None:
             setattr(merged, field, value)
+            merged.set_known(field)
             newly_filled.append(field)
 
     pending_before = existing.missing_required()
@@ -431,11 +604,15 @@ def parse_message(message: str, existing: SiteInput) -> ParseResult:
         value = _parse_expected_field(message, target_field)
         if value is not None:
             setattr(merged, target_field, value)
+            merged.set_known(target_field)
             newly_filled.append(target_field)
         elif not is_greeting(message):
             understood = False
 
-    return ParseResult(site_input=merged, newly_filled=newly_filled, understood=understood)
+    # Final user-value integrity check (spec §5)
+    merged.validate_user_values()
+
+    return ParseResult(site_input=merged, newly_filled=newly_filled, understood=understood, is_correction=is_correction)
 
 
 def _llm_parse(message: str, llm) -> SiteInput | None:
@@ -445,11 +622,14 @@ def _llm_parse(message: str, llm) -> SiteInput | None:
             "with keys soil_organic_carbon_pct (float or null), rainfall "
             "('low'|'medium'|'high' or null), land_use (string or null), "
             "region (string or null), pollution_level ('low'|'medium'|'high' or null), "
-            "deforestation_trend ('stable'|'increasing'|'decreasing' or null). "
+            "deforestation_trend ('stable'|'increasing'|'decreasing' or null), "
+            "soil_ph (float or null), soil_moisture ('low'|'medium'|'high' or null), "
+            "human_impact (string or null), biodiversity_status (string or null). "
             "Convert any numeric rainfall (mm/cm/inches) to low/medium/high using "
             "<450mm=low, 450-1000mm=medium, >1000mm=high. Correct obvious typos in "
             "land_use/region to the closest standard term. Only include fields "
-            "explicitly stated or clearly implied. Respond with JSON only.\n\n"
+            "explicitly stated or clearly implied. Do NOT invent values for fields "
+            "the user did not mention. Respond with JSON only.\n\n"
             f"Message: {message}"
         )
         result = llm.invoke(prompt)
@@ -459,7 +639,12 @@ def _llm_parse(message: str, llm) -> SiteInput | None:
         content = content.strip().strip("`").replace("json\n", "").strip()
         payload = json.loads(content)
         valid_fields = SiteInput.model_fields.keys()
-        return SiteInput(**{k: v for k, v in payload.items() if k in valid_fields})
+        site = SiteInput(**{k: v for k, v in payload.items() if k in valid_fields})
+        # Mark all LLM-extracted fields as KNOWN
+        for k, v in payload.items():
+            if k in valid_fields and v is not None:
+                site.set_known(k)
+        return site
     except Exception:
         return None
 
@@ -483,18 +668,53 @@ def humanize_known_fields(site_input: SiteInput, fields: list[str]) -> str:
 
 
 def next_clarifying_question(site_input: SiteInput, is_first_turn: bool = False) -> str:
+    """Adaptive clarification (spec §8): ask for the information most useful
+    for the CURRENT reasoning problem, not always the same fixed order."""
+    from app.relationships import infer_primary_metrics
     missing = site_input.missing_required()
     if not missing:
         return ""
-    field = missing[0]
+
+    # --- Adaptive field priority based on current context ---
+    # Determine what pressures exist from what we know so far
+    known_pressures = infer_primary_metrics(site_input)
+    hi = (site_input.human_impact or "").lower()
+    bio = (site_input.biodiversity_status or "").lower()
+
+    # Re-prioritize missing fields based on likely usefulness
+    priority_order = list(missing)
+    if any(p in known_pressures for p in ["soil_organic_carbon", "grazing_pressure"]):
+        # Soil degradation context: soil/climate info most useful
+        preferred = ["soil_organic_carbon_pct", "rainfall", "region", "land_use"]
+        priority_order = [f for f in preferred if f in missing] + [f for f in missing if f not in preferred]
+    elif any(p in known_pressures for p in ["pesticide_exposure"]):
+        # Pollinator context: land use and region most useful
+        preferred = ["land_use", "region", "rainfall", "soil_organic_carbon_pct"]
+        priority_order = [f for f in preferred if f in missing] + [f for f in missing if f not in preferred]
+    elif any(p in known_pressures for p in ["habitat_fragmentation", "habitat_loss", "deforestation_trend"]):
+        # Habitat context: land use and region critical
+        preferred = ["land_use", "region", "soil_organic_carbon_pct", "rainfall"]
+        priority_order = [f for f in preferred if f in missing] + [f for f in missing if f not in preferred]
+    elif "pollinator" in hi or "pollinator" in bio:
+        preferred = ["land_use", "region", "rainfall", "soil_organic_carbon_pct"]
+        priority_order = [f for f in preferred if f in missing] + [f for f in missing if f not in preferred]
+
+    field = priority_order[0]
     question = FIELD_QUESTIONS.get(field, f"Could you provide {field.replace('_', ' ')}?")
 
-    # Context-aware nudge: reference what's already known so it doesn't read
-    # like an identical form no matter the conversation so far.
+    # Context-aware framing: reference known data to make the question feel intelligent
     if field == "rainfall" and site_input.region:
         question = f"Given it's a {site_input.region} region, {question[0].lower()}{question[1:]}"
+    elif field == "rainfall" and site_input.land_use:
+        question = f"For {site_input.land_use} systems, {question[0].lower()}{question[1:]}"
     elif field == "land_use" and site_input.rainfall:
         question = f"With {site_input.rainfall} rainfall in mind, {question[0].lower()}{question[1:]}"
+    elif field == "land_use" and site_input.region:
+        question = f"In this {site_input.region} environment, {question[0].lower()}{question[1:]}"
+    elif field == "region" and site_input.land_use:
+        question = f"For this {site_input.land_use} site, {question[0].lower()}{question[1:]}"
+    elif field == "soil_organic_carbon_pct" and site_input.land_use:
+        question = f"For your {site_input.land_use} system, {question[0].lower()}{question[1:]}"
 
     return f"{GREETING}{question}" if is_first_turn else question
 
