@@ -6,14 +6,15 @@ from sqlalchemy import String, Integer, JSON
 from sqlalchemy.sql import expression
 
 from app.config import settings
+from app.embeddings import get_embedding_dim
 
-EMBEDDING_DIM = 384  # all-MiniLM-L6-v2 output size
+EMBEDDING_DIM = get_embedding_dim()  # 768 (Google API) or 384 (local)
 
 engine = create_engine(
     settings.database_url,
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=5,
+    max_overflow=10,
     pool_recycle=300,
 )
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
@@ -50,3 +51,4 @@ def init_db() -> None:
         )
         conn.commit()
     Base.metadata.create_all(engine)
+

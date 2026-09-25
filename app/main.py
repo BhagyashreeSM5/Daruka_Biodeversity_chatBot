@@ -26,6 +26,17 @@ def on_startup():
     init_db()
     # Pre-warm embedding model so first request doesn't experience ~5s cold-start
     get_model()
+    # Auto-ingest knowledge base if table is empty (first deploy or dimension change)
+    try:
+        from app.db import SessionLocal, KnowledgeChunk
+        session = SessionLocal()
+        count = session.query(KnowledgeChunk).count()
+        session.close()
+        if count == 0:
+            from app.ingest import run_ingest
+            run_ingest()
+    except Exception:
+        pass
 
 
 @app.get("/")

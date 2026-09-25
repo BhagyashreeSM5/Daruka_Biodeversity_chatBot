@@ -4,7 +4,7 @@ import numpy as np
 from sqlalchemy import select
 
 from app.db import SessionLocal, KnowledgeChunk
-from app.embeddings import embed_text, embed_batch
+from app.embeddings import embed_text, embed_batch, embed_query
 from app.config import settings
 from app.models import EvidenceChunk
 
@@ -47,7 +47,7 @@ def retrieve_evidence(query: str, top_k: int | None = None) -> list[EvidenceChun
     This is the explicit, inspectable retrieval step the brief asks for —
     every recommendation traces back to one of these rows via `source`."""
     top_k = top_k or settings.top_k_evidence
-    query_vector = embed_text(query)
+    query_vector = embed_query(query)
 
     try:
         session = SessionLocal()
